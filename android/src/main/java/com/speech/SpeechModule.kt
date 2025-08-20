@@ -50,6 +50,7 @@ class SpeechModule(reactContext: ReactApplicationContext) :
 
   private var isPaused = false
   private var isResuming = false
+  private var isDucking = false
   private var currentQueueIndex = -1
   private val speechQueue = mutableListOf<SpeechQueueItem>()
 
@@ -128,8 +129,9 @@ class SpeechModule(reactContext: ReactApplicationContext) :
               speechQueue.find { it.utteranceId == utteranceId }?.let { item ->
                 item.status = SpeechStatus.SPEAKING
 
-                if (currentQueueIndex == 0 || (isResuming && item.position > 0)) {
+                if (!isDucking) {
                   audioDuckingModule.startDucking()
+                  isDucking = true
                 }
 
                 if (isResuming && item.position > 0) {
@@ -151,6 +153,7 @@ class SpeechModule(reactContext: ReactApplicationContext) :
 
                   if (currentQueueIndex >= speechQueue.size) {
                     audioDuckingModule.stopDucking()
+                    isDucking = false
                   }
 
                   processNextQueueItem()
@@ -374,6 +377,7 @@ class SpeechModule(reactContext: ReactApplicationContext) :
       if (synthesizer.isSpeaking || isPaused) {
         synthesizer.stop()
         audioDuckingModule.stopDucking()
+        isDucking = false
         synchronized(queueLock) {
           if (currentQueueIndex in speechQueue.indices) {
             val item = speechQueue[currentQueueIndex]
