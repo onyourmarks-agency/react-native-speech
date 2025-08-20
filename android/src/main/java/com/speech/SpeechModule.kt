@@ -19,6 +19,8 @@ import com.facebook.react.module.annotations.ReactModule
 class SpeechModule(reactContext: ReactApplicationContext) :
   NativeSpeechSpec(reactContext) {
 
+  private val audioDuckingModule: AudioDuckingModule = AudioDuckingModule(reactContext)
+
   override fun getName(): String {
     return NAME
   }
@@ -125,6 +127,11 @@ class SpeechModule(reactContext: ReactApplicationContext) :
             synchronized(queueLock) {
               speechQueue.find { it.utteranceId == utteranceId }?.let { item ->
                 item.status = SpeechStatus.SPEAKING
+
+                if (currentQueueIndex == 0 || (isResuming && item.position > 0)) {
+                  audioDucking.startDucking()
+                }
+
                 if (isResuming && item.position > 0) {
                   emitOnResume(getEventData(utteranceId))
                   isResuming = false
@@ -141,6 +148,11 @@ class SpeechModule(reactContext: ReactApplicationContext) :
                 emitOnFinish(getEventData(utteranceId))
                 if (!isPaused) {
                   currentQueueIndex++
+
+                  if (currentQueueIndex >= speechQueue.size) {
+                    audioDucking.stopDucking()
+                  }
+
                   processNextQueueItem()
                 }
               }
@@ -361,6 +373,7 @@ class SpeechModule(reactContext: ReactApplicationContext) :
     ensureInitialized(promise) {
       if (synthesizer.isSpeaking || isPaused) {
         synthesizer.stop()
+        audioDucking.stopDucking()
         synchronized(queueLock) {
           if (currentQueueIndex in speechQueue.indices) {
             val item = speechQueue[currentQueueIndex]
@@ -406,51 +419,40 @@ class SpeechModule(reactContext: ReactApplicationContext) :
     }
   }
 
-  override fun speak(text: String?, promise: Promise) {
-    if (text == null) {
-      promise.reject("speech_error", "Text cannot be null")
-      return
-    }
-    ensureInitialized(promise) {
-      val utteranceId = getUniqueID()
-      val queueItem = SpeechQueueItem(text = text, options = emptyMap(), utteranceId = utteranceId)
-      synchronized(queueLock) {
-        speechQueue.add(queueItem)
-        if (!synthesizer.isSpeaking && !isPaused) {
-          currentQueueIndex = speechQueue.size - 1
-          processNextQueueItem()
-        }
-      }
-      promise.resolve(null)
-    }
-  }
-
-  override fun speakWithOptions(text: String?, options: ReadableMap, promise: Promise) {
-    if (text == null) {
-      promise.reject("speech_error", "Text cannot be null")
-      return
-    }
-    ensureInitialized(promise) {
-      val utteranceId = getUniqueID()
-      val validatedOptions = getValidatedOptions(options)
-      val queueItem = SpeechQueueItem(text = text, options = validatedOptions, utteranceId = utteranceId)
-      synchronized(queueLock) {
-        speechQueue.add(queueItem)
-        if (!synthesizer.isSpeaking && !isPaused) {
-          currentQueueIndex = speechQueue.size - 1
-          processNextQueueItem()
-        }
-      }
-      promise.resolve(null)
-    }
-  }
-
   override fun invalidate() {
     super.invalidate()
     if (::synthesizer.isInitialized) {
       synthesizer.stop()
       synthesizer.shutdown()
       resetQueueState()
+    }
+  }
+
+  override fun speak(text: String?, promise: Promise) {
+    internalSpeak(text, emptyMap(), promise)
+  }
+
+  override fun speakWithOptions(text: String?, options: ReadableMap, promise: Promise) {
+    val validatedOptions = getValidatedOptions(options)
+    internalSpeak(text, validatedOptions, promise)
+  }
+
+  private fun internalSpeak(text: String?, options: Map<String, Any>, promise: Promise) {
+    if (text == null) {
+      promise.reject("speech_error", "Text cannot be null")
+      return
+    }
+    ensureInitialized(promise) {
+      val utteranceId = getUniqueID()
+      val queueItem = SpeechQueueItem(text = text, options = options, utteranceId = utteranceId)
+      synchronized(queueLock) {
+        speechQueue.add(queueItem)
+        if (!synthesizer.isSpeaking && !isPaused) {
+          currentQueueIndex = speechQueue.size - 1
+          processNextQueueItem()
+        }
+      }
+      promise.resolve(null)
     }
   }
 }
