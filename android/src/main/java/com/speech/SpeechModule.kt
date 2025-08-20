@@ -129,7 +129,7 @@ class SpeechModule(reactContext: ReactApplicationContext) :
                 item.status = SpeechStatus.SPEAKING
 
                 if (currentQueueIndex == 0 || (isResuming && item.position > 0)) {
-                  audioDucking.startDucking()
+                  audioDuckingModule.startDucking()
                 }
 
                 if (isResuming && item.position > 0) {
@@ -150,7 +150,7 @@ class SpeechModule(reactContext: ReactApplicationContext) :
                   currentQueueIndex++
 
                   if (currentQueueIndex >= speechQueue.size) {
-                    audioDucking.stopDucking()
+                    audioDuckingModule.stopDucking()
                   }
 
                   processNextQueueItem()
@@ -373,7 +373,7 @@ class SpeechModule(reactContext: ReactApplicationContext) :
     ensureInitialized(promise) {
       if (synthesizer.isSpeaking || isPaused) {
         synthesizer.stop()
-        audioDucking.stopDucking()
+        audioDuckingModule.stopDucking()
         synchronized(queueLock) {
           if (currentQueueIndex in speechQueue.indices) {
             val item = speechQueue[currentQueueIndex]
