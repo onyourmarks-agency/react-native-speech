@@ -19,14 +19,15 @@ RCT_EXPORT_MODULE();
   if (self) {
     _synthesizer = [[AVSpeechSynthesizer alloc] init];
     _synthesizer.delegate = self;
-    
+    _audioDucking = [[Ducking alloc] init];
+
     defaultOptions = @{
       @"pitch": @(1.0),
       @"volume": @(1.0),
       @"rate": @(AVSpeechUtteranceDefaultSpeechRate),
       @"language": [AVSpeechSynthesisVoice currentLanguageCode] ?: @"en-US"
     };
-    
+
     self.globalOptions = [defaultOptions copy];
   }
   return self;
@@ -49,7 +50,7 @@ RCT_EXPORT_MODULE();
 
 - (NSDictionary *)getValidatedOptions:(VoiceOptions &)options {
   NSMutableDictionary *validatedOptions = [NSMutableDictionary new];
-  
+
   if (options.voice()) {
     validatedOptions[@"voice"] = options.voice();
   }
@@ -74,7 +75,7 @@ RCT_EXPORT_MODULE();
 
 - (AVSpeechUtterance *)getDefaultUtterance:(NSString *)text {
   AVSpeechUtterance *utterance = [[AVSpeechUtterance alloc] initWithString:text];
-  
+
   if (self.globalOptions[@"voice"]) {
     AVSpeechSynthesisVoice *voice = [AVSpeechSynthesisVoice voiceWithIdentifier:self.globalOptions[@"voice"]];
     if (voice) {
@@ -105,14 +106,14 @@ RCT_EXPORT_MODULE();
 
 - (void)getAvailableVoices:(NSString *)language
                   resolve:(RCTPromiseResolveBlock)resolve
-                  reject:(RCTPromiseRejectBlock)reject 
+                  reject:(RCTPromiseRejectBlock)reject
 {
   NSMutableArray *voicesArray = [NSMutableArray new];
   NSArray *speechVoices = [AVSpeechSynthesisVoice speechVoices];
-  
+
   if (language) {
     NSString *lowercaseLanguage = [language lowercaseString];
-    
+
     for (AVSpeechSynthesisVoice *voice in speechVoices) {
       NSString *voiceLanguage = [voice.language lowercaseString];
 
@@ -136,6 +137,7 @@ RCT_EXPORT_MODULE();
 - (void)stop:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject {
   if (self.synthesizer.isSpeaking) {
     [self.synthesizer stopSpeakingAtBoundary:AVSpeechBoundaryImmediate];
+    [self.audioDucking stopDucking];
   }
   resolve(nil);
 }
@@ -168,7 +170,7 @@ RCT_EXPORT_MODULE();
   }
 
   AVSpeechUtterance *utterance;
- 
+
   @try {
     utterance = [self getDefaultUtterance:text];
     [self.synthesizer speakUtterance:utterance];
@@ -189,7 +191,7 @@ RCT_EXPORT_MODULE();
     reject(@"speech_error", @"Text cannot be null", nil);
     return;
   }
-  
+
   AVSpeechUtterance *utterance;
 
   @try {
@@ -198,7 +200,7 @@ RCT_EXPORT_MODULE();
 
     if (validatedOptions[@"voice"]) {
       AVSpeechSynthesisVoice *voice = [AVSpeechSynthesisVoice voiceWithIdentifier:validatedOptions[@"voice"]];
-      
+
       if (voice) {
         utterance.voice = voice;
       } else if (validatedOptions[@"language"]) {
@@ -224,8 +226,9 @@ RCT_EXPORT_MODULE();
   }
 }
 
-- (void)speechSynthesizer:(AVSpeechSynthesizer *)synthesizer 
+- (void)speechSynthesizer:(AVSpeechSynthesizer *)synthesizer
   didStartSpeechUtterance:(AVSpeechUtterance *)utterance {
+  [self.audioDucking startDucking];
   [self emitOnStart:[self getEventData:utterance]];
 }
 
@@ -241,6 +244,10 @@ RCT_EXPORT_MODULE();
 - (void)speechSynthesizer:(AVSpeechSynthesizer *)synthesizer
   didFinishSpeechUtterance:(AVSpeechUtterance *)utterance {
   [self emitOnFinish:[self getEventData:utterance]];
+
+  if (!synthesizer.isSpeaking) {
+    [self.audioDucking stopDucking];
+  }
 }
 
 - (void)speechSynthesizer:(AVSpeechSynthesizer *)synthesizer
@@ -255,6 +262,7 @@ RCT_EXPORT_MODULE();
 
 - (void)speechSynthesizer:(AVSpeechSynthesizer *)synthesizer
   didCancelSpeechUtterance:(AVSpeechUtterance *)utterance {
+  [self.audioDucking stopDucking];
   [self emitOnStopped:[self getEventData:utterance]];
 }
 
