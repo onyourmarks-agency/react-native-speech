@@ -19,7 +19,6 @@ RCT_EXPORT_MODULE();
   if (self) {
     _synthesizer = [[AVSpeechSynthesizer alloc] init];
     _synthesizer.delegate = self;
-    _audioDucking = [[Ducking alloc] init];
 
     defaultOptions = @{
       @"pitch": @(1.0),
@@ -31,6 +30,31 @@ RCT_EXPORT_MODULE();
     self.globalOptions = [defaultOptions copy];
   }
   return self;
+}
+
+- (void)enableDucking {
+  NSError *error = nil;
+  [[AVAudioSession sharedInstance] setCategory:AVAudioSessionCategoryPlayback
+                                   withOptions:AVAudioSessionCategoryOptionDuckOthers
+                                         error:&error];
+  if (error) {
+    NSLog(@"⚠️ Error enabling ducking: %@", error);
+  }
+
+  [[AVAudioSession sharedInstance] setActive:YES error:&error];
+  if (error) {
+    NSLog(@"⚠️ Error activating audio session: %@", error);
+  }
+}
+
+- (void)disableDucking {
+  NSError *error = nil;
+  [[AVAudioSession sharedInstance] setActive:NO
+                                 withOptions:AVAudioSessionSetActiveOptionNotifyOthersOnDeactivation
+                                       error:&error];
+  if (error) {
+    NSLog(@"⚠️ Error deactivating audio session: %@", error);
+  }
 }
 
 - (NSDictionary *)getEventData:(AVSpeechUtterance *)utterance {
@@ -76,20 +100,28 @@ RCT_EXPORT_MODULE();
 - (AVSpeechUtterance *)getDefaultUtterance:(NSString *)text {
   AVSpeechUtterance *utterance = [[AVSpeechUtterance alloc] initWithString:text];
 
+  NSLog(@"🔊 Creating utterance for: %@", text);
+
   if (self.globalOptions[@"voice"]) {
     AVSpeechSynthesisVoice *voice = [AVSpeechSynthesisVoice voiceWithIdentifier:self.globalOptions[@"voice"]];
+    NSLog(@"🔊 Voice lookup result: %@", voice);
     if (voice) {
       utterance.voice = voice;
+      NSLog(@"🔊 Set voice by identifier: %@", voice.identifier);
     } else if (self.globalOptions[@"language"]) {
       utterance.voice = [AVSpeechSynthesisVoice voiceWithLanguage:self.globalOptions[@"language"]];
+      NSLog(@"🔊 Set voice by language fallback: %@", utterance.voice.identifier);
     }
   } else {
     utterance.voice = [AVSpeechSynthesisVoice voiceWithLanguage:self.globalOptions[@"language"]];
+    NSLog(@"🔊 Set voice by language: %@", utterance.voice.identifier);
   }
+
   utterance.rate = [self.globalOptions[@"rate"] floatValue];
   utterance.volume = [self.globalOptions[@"volume"] floatValue];
   utterance.pitchMultiplier = [self.globalOptions[@"pitch"] floatValue];
 
+  NSLog(@"🔊 Final utterance voice: %@", utterance.voice.identifier);
   return utterance;
 }
 
@@ -137,7 +169,6 @@ RCT_EXPORT_MODULE();
 - (void)stop:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject {
   if (self.synthesizer.isSpeaking) {
     [self.synthesizer stopSpeakingAtBoundary:AVSpeechBoundaryImmediate];
-    [self.audioDucking stopDucking];
   }
   resolve(nil);
 }
@@ -200,7 +231,6 @@ RCT_EXPORT_MODULE();
 
     if (validatedOptions[@"voice"]) {
       AVSpeechSynthesisVoice *voice = [AVSpeechSynthesisVoice voiceWithIdentifier:validatedOptions[@"voice"]];
-
       if (voice) {
         utterance.voice = voice;
       } else if (validatedOptions[@"language"]) {
@@ -228,8 +258,8 @@ RCT_EXPORT_MODULE();
 
 - (void)speechSynthesizer:(AVSpeechSynthesizer *)synthesizer
   didStartSpeechUtterance:(AVSpeechUtterance *)utterance {
-  [self.audioDucking startDucking];
-  [self emitOnStart:[self getEventData:utterance]];
+   [self enableDucking];
+   [self emitOnStart:[self getEventData:utterance]];
 }
 
 - (void)speechSynthesizer:(AVSpeechSynthesizer *)synthesizer
@@ -243,11 +273,10 @@ RCT_EXPORT_MODULE();
 
 - (void)speechSynthesizer:(AVSpeechSynthesizer *)synthesizer
   didFinishSpeechUtterance:(AVSpeechUtterance *)utterance {
-  [self emitOnFinish:[self getEventData:utterance]];
-
   if (!synthesizer.isSpeaking) {
-    [self.audioDucking stopDucking];
+    [self disableDucking];
   }
+  [self emitOnFinish:[self getEventData:utterance]];
 }
 
 - (void)speechSynthesizer:(AVSpeechSynthesizer *)synthesizer
@@ -262,7 +291,9 @@ RCT_EXPORT_MODULE();
 
 - (void)speechSynthesizer:(AVSpeechSynthesizer *)synthesizer
   didCancelSpeechUtterance:(AVSpeechUtterance *)utterance {
-  [self.audioDucking stopDucking];
+  if (!synthesizer.isSpeaking) {
+    [self disableDucking];
+  }
   [self emitOnStopped:[self getEventData:utterance]];
 }
 
