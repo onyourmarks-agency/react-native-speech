@@ -34,7 +34,7 @@ RCT_EXPORT_MODULE();
 }
 
 - (void)enableDucking {
-  if (_isDucking) return;
+  if (self.isDucking) return;
 
   NSError *error = nil;
   [[AVAudioSession sharedInstance] setCategory:AVAudioSessionCategoryPlayback
@@ -48,11 +48,11 @@ RCT_EXPORT_MODULE();
   if (error) {
     NSLog(@"⚠️ Error activating audio session: %@", error);
   }
-  _isDucking = YES;
+  self.isDucking = YES;
 }
 
 - (void)disableDucking {
-  if (!_isDucking) return; // only disable if active
+  if (!self.isDucking) return; // only disable if active
 
   NSError *error = nil;
   [[AVAudioSession sharedInstance] setActive:NO
@@ -62,7 +62,7 @@ RCT_EXPORT_MODULE();
     NSLog(@"⚠️ Error deactivating audio session: %@", error);
   }
 
-  _isDucking = NO;
+  self.isDucking = NO;
 }
 
 - (NSDictionary *)getEventData:(AVSpeechUtterance *)utterance {
