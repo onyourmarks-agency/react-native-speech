@@ -20,6 +20,7 @@ RCT_EXPORT_MODULE();
     _synthesizer = [[AVSpeechSynthesizer alloc] init];
     _synthesizer.delegate = self;
     _isDucking = NO;
+    _activeUtteranceCount = 0;
 
     defaultOptions = @{
       @"pitch": @(1.0),
@@ -138,6 +139,11 @@ RCT_EXPORT_MODULE();
   NSDictionary *validatedOptions = [self getValidatedOptions:options];
   [newOptions addEntriesFromDictionary:validatedOptions];
   self.globalOptions = newOptions;
+
+  AVSpeechUtterance *warmup = [[AVSpeechUtterance alloc] initWithString:@" "];
+        warmup.volume = 0.0;
+        warmup.rate = AVSpeechUtteranceMinimumSpeechRate;
+        [self.synthesizer speakUtterance:warmup];
 }
 
 - (void)reset {
@@ -213,6 +219,7 @@ RCT_EXPORT_MODULE();
   @try {
     utterance = [self getDefaultUtterance:text];
     [self.synthesizer speakUtterance:utterance];
+    self.activeUtteranceCount += 1;
     resolve(nil);
   }
   @catch (NSException *exception) {
@@ -256,6 +263,8 @@ RCT_EXPORT_MODULE();
     }
 
     [self.synthesizer speakUtterance:utterance];
+    self.activeUtteranceCount += 1;
+
     resolve(nil);
   }
   @catch (NSException *exception) {
@@ -281,10 +290,12 @@ RCT_EXPORT_MODULE();
 
 - (void)speechSynthesizer:(AVSpeechSynthesizer *)synthesizer
   didFinishSpeechUtterance:(AVSpeechUtterance *)utterance {
-  if (!synthesizer.isSpeaking) {
-    [self disableDucking];
-  }
-  [self emitOnFinish:[self getEventData:utterance]];
+    self.activeUtteranceCount -= 1;
+    [self emitOnFinish:[self getEventData:utterance]];
+    if (self.activeUtteranceCount <= 0) {
+        self.activeUtteranceCount = 0;
+        [self disableDucking];
+    }
 }
 
 - (void)speechSynthesizer:(AVSpeechSynthesizer *)synthesizer
