@@ -2,6 +2,8 @@
 #import <AVFoundation/AVFoundation.h>
 #import <os/log.h>
 
+using namespace JS::NativeSpeech;
+
 @interface Ducking : NSObject
 
 - (void)startDucking;
