@@ -19,6 +19,7 @@ RCT_EXPORT_MODULE();
   if (self) {
     _synthesizer = [[AVSpeechSynthesizer alloc] init];
     _synthesizer.delegate = self;
+    _isDucking = NO;
 
     defaultOptions = @{
       @"pitch": @(1.0),
@@ -33,6 +34,8 @@ RCT_EXPORT_MODULE();
 }
 
 - (void)enableDucking {
+  if (_isDucking) return;
+
   NSError *error = nil;
   [[AVAudioSession sharedInstance] setCategory:AVAudioSessionCategoryPlayback
                                    withOptions:AVAudioSessionCategoryOptionDuckOthers
@@ -45,9 +48,12 @@ RCT_EXPORT_MODULE();
   if (error) {
     NSLog(@"⚠️ Error activating audio session: %@", error);
   }
+  _isDucking = YES;
 }
 
 - (void)disableDucking {
+  if (!_isDucking) return; // only disable if active
+
   NSError *error = nil;
   [[AVAudioSession sharedInstance] setActive:NO
                                  withOptions:AVAudioSessionSetActiveOptionNotifyOthersOnDeactivation
@@ -55,6 +61,8 @@ RCT_EXPORT_MODULE();
   if (error) {
     NSLog(@"⚠️ Error deactivating audio session: %@", error);
   }
+
+  _isDucking = NO;
 }
 
 - (NSDictionary *)getEventData:(AVSpeechUtterance *)utterance {
