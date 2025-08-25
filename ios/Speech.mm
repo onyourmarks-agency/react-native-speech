@@ -54,7 +54,7 @@ RCT_EXPORT_MODULE();
   if (self.activeUtteranceCount > 0) return;
 
   NSError *error = nil;
-  [[AVAudioSession sharedInstance] setCategory:AVAudioSessionCategoryPlayback
+  [[AVAudioSession sharedInstance] setCategory:AVAudioSessionCategoryAmbient
                                    withOptions:AVAudioSessionCategoryOptionDuckOthers
                                          error:&error];
   if (error) {
