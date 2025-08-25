@@ -7,7 +7,6 @@ NS_ASSUME_NONNULL_BEGIN
 
 @interface Speech : NativeSpeechSpecBase <NativeSpeechSpec, AVSpeechSynthesizerDelegate>
 @property (nonatomic, strong) AVSpeechSynthesizer *synthesizer;
-@property (nonatomic) BOOL isDucking;
 @property (nonatomic, strong) NSDictionary *globalOptions;
 @property (nonatomic, assign) NSInteger activeUtteranceCount;
 @end

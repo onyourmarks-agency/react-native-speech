@@ -32,7 +32,6 @@ RCT_EXPORT_MODULE();
   if (self) {
     _synthesizer = [[AVSpeechSynthesizer alloc] init];
     _synthesizer.delegate = self;
-    _isDucking = NO;
     _activeUtteranceCount = 0;
 
     defaultOptions = @{
@@ -43,44 +42,18 @@ RCT_EXPORT_MODULE();
     };
     self.globalOptions = [defaultOptions copy];
 
+    NSError *error = nil;
+    [[AVAudioSession sharedInstance] setCategory:AVAudioSessionCategoryAmbient
+                                    withOptions:AVAudioSessionCategoryOptionMixWithOthers | AVAudioSessionCategoryOptionDuckOthers | AVAudioSessionCategoryOptionAllowBluetoothA2DP
+                                    error:&error];
+    if (error) {
+      NSLog(@"⚠️ Error enabling ducking: %@", error);
+    }
+
     initialized = YES;
     NSLog(@"✅ Speech singleton initialized %@", self);
   }
   return self;
-}
-
-- (void)enableDucking {
-  if (self.isDucking) return;
-  if (self.activeUtteranceCount > 0) return;
-
-  NSError *error = nil;
-  [[AVAudioSession sharedInstance] setCategory:AVAudioSessionCategoryPlayback
-                                   withOptions:AVAudioSessionCategoryOptionMixWithOthers | AVAudioSessionCategoryOptionDuckOthers
-                                         error:&error];
-  if (error) {
-    NSLog(@"⚠️ Error enabling ducking: %@", error);
-  }
-
-  [[AVAudioSession sharedInstance] setActive:YES error:&error];
-  if (error) {
-    NSLog(@"⚠️ Error activating audio session: %@", error);
-  }
-  self.isDucking = YES;
-}
-
-- (void)disableDucking {
-    if (!self.isDucking) return;
-    if (self.activeUtteranceCount > 0) return;
-
-    NSError *error = nil;
-    [[AVAudioSession sharedInstance] setActive:NO
-        withOptions:AVAudioSessionSetActiveOptionNotifyOthersOnDeactivation
-        error:&error];
-    if (error) {
-        NSLog(@"⚠️ Error deactivating audio session: %@", error);
-    }
-
-    self.isDucking = NO;
 }
 
 - (NSDictionary *)getEventData:(AVSpeechUtterance *)utterance {
@@ -280,7 +253,6 @@ RCT_EXPORT_MODULE();
     }
 
     self.activeUtteranceCount += 1;
-    [self enableDucking];
     [self.synthesizer speakUtterance:utterance];
 
     resolve(nil);
@@ -315,7 +287,7 @@ RCT_EXPORT_MODULE();
     }
 
     if (!self.synthesizer.isSpeaking && self.activeUtteranceCount <= 0) {
-        [self disableDucking];
+        [self deactivateAudioSessionAfterDelay];
     }
 }
 
@@ -336,9 +308,28 @@ RCT_EXPORT_MODULE();
         [self emitOnStopped:[self getEventData:utterance]];
     }
 
-    if (!synthesizer.isSpeaking) {
-        [self disableDucking];
+    if (!self.synthesizer.isSpeaking && self.activeUtteranceCount <= 0) {
+        [self deactivateAudioSessionAfterDelay];
     }
+}
+
+// Add this helper method to handle proper audio session deactivation
+- (void)deactivateAudioSessionAfterDelay {
+    // Small delay to ensure synthesizer has fully finished
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        // Double-check that we're really done speaking
+        if (!self.synthesizer.isSpeaking && self.activeUtteranceCount <= 0) {
+            NSError *error = nil;
+            [[AVAudioSession sharedInstance] setActive:NO
+                withOptions:AVAudioSessionSetActiveOptionNotifyOthersOnDeactivation
+                error:&error];
+            if (error) {
+                NSLog(@"⚠️ Error deactivating audio session: %@", error);
+            } else {
+                NSLog(@"✅ Audio session deactivated - ducking released");
+            }
+        }
+    });
 }
 
 - (std::shared_ptr<facebook::react::TurboModule>)getTurboModule:
