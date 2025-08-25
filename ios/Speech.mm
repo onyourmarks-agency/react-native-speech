@@ -54,8 +54,8 @@ RCT_EXPORT_MODULE();
   if (self.activeUtteranceCount > 0) return;
 
   NSError *error = nil;
-  [[AVAudioSession sharedInstance] setCategory:AVAudioSessionCategoryAmbient
-                                   withOptions:AVAudioSessionCategoryOptionDuckOthers
+  [[AVAudioSession sharedInstance] setCategory:AVAudioSessionCategoryPlayback
+                                   withOptions:AVAudioSessionCategoryOptionMixWithOthers | AVAudioSessionCategoryOptionDuckOthers
                                          error:&error];
   if (error) {
     NSLog(@"⚠️ Error enabling ducking: %@", error);
