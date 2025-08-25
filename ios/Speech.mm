@@ -9,13 +9,26 @@ using namespace JS::NativeSpeech;
 
 RCT_EXPORT_MODULE();
 
++ (instancetype)allocWithZone:(struct _NSZone *)zone {
+  static Speech *shared = nil;
+  static dispatch_once_t onceToken;
+  dispatch_once(&onceToken, ^{
+    shared = [super allocWithZone:zone];
+  });
+  return shared;
+}
+
 + (BOOL)requiresMainQueueSetup {
   return NO;
 }
 
 - (instancetype)init {
-  self = [super init];
+  static BOOL initialized = NO;
+  if (initialized) {
+    return self; // return existing singleton
+  }
 
+  self = [super init];
   if (self) {
     _synthesizer = [[AVSpeechSynthesizer alloc] init];
     _synthesizer.delegate = self;
@@ -28,8 +41,10 @@ RCT_EXPORT_MODULE();
       @"rate": @(AVSpeechUtteranceDefaultSpeechRate),
       @"language": [AVSpeechSynthesisVoice currentLanguageCode] ?: @"en-US"
     };
-
     self.globalOptions = [defaultOptions copy];
+
+    initialized = YES;
+    NSLog(@"✅ Speech singleton initialized %@", self);
   }
   return self;
 }
