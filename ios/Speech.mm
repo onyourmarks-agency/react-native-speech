@@ -53,17 +53,18 @@ RCT_EXPORT_MODULE();
 }
 
 - (void)disableDucking {
-  if (!self.isDucking) return; // only disable if active
+    if (!self.isDucking) return;
+    if (self.activeUtteranceCount > 0) return;
 
-  NSError *error = nil;
-  [[AVAudioSession sharedInstance] setActive:NO
-                                 withOptions:AVAudioSessionSetActiveOptionNotifyOthersOnDeactivation
-                                       error:&error];
-  if (error) {
-    NSLog(@"⚠️ Error deactivating audio session: %@", error);
-  }
+    NSError *error = nil;
+    [[AVAudioSession sharedInstance] setActive:NO
+        withOptions:AVAudioSessionSetActiveOptionNotifyOthersOnDeactivation
+        error:&error];
+    if (error) {
+        NSLog(@"⚠️ Error deactivating audio session: %@", error);
+    }
 
-  self.isDucking = NO;
+    self.isDucking = NO;
 }
 
 - (NSDictionary *)getEventData:(AVSpeechUtterance *)utterance {
@@ -135,15 +136,16 @@ RCT_EXPORT_MODULE();
 }
 
 - (void)initialize:(VoiceOptions &)options {
-  NSMutableDictionary *newOptions = [NSMutableDictionary dictionaryWithDictionary:self.globalOptions];
-  NSDictionary *validatedOptions = [self getValidatedOptions:options];
-  [newOptions addEntriesFromDictionary:validatedOptions];
-  self.globalOptions = newOptions;
+    NSMutableDictionary *newOptions = [NSMutableDictionary dictionaryWithDictionary:self.globalOptions];
+    NSDictionary *validatedOptions = [self getValidatedOptions:options];
+    [newOptions addEntriesFromDictionary:validatedOptions];
+    self.globalOptions = newOptions;
 
-  AVSpeechUtterance *warmup = [[AVSpeechUtterance alloc] initWithString:@" "];
-        warmup.volume = 0.0;
-        warmup.rate = AVSpeechUtteranceMinimumSpeechRate;
-        [self.synthesizer speakUtterance:warmup];
+    AVSpeechUtterance *warmup = [[AVSpeechUtterance alloc] initWithString:@" "];
+    warmup.volume = 0.0;
+    warmup.rate = AVSpeechUtteranceMinimumSpeechRate;
+    warmup.accessibilityHint = @"__warmup__";
+    [self.synthesizer speakUtterance:warmup];
 }
 
 - (void)reset {
@@ -219,7 +221,6 @@ RCT_EXPORT_MODULE();
   @try {
     utterance = [self getDefaultUtterance:text];
     [self.synthesizer speakUtterance:utterance];
-    self.activeUtteranceCount += 1;
     resolve(nil);
   }
   @catch (NSException *exception) {
@@ -263,7 +264,6 @@ RCT_EXPORT_MODULE();
     }
 
     [self.synthesizer speakUtterance:utterance];
-    self.activeUtteranceCount += 1;
 
     resolve(nil);
   }
@@ -275,8 +275,11 @@ RCT_EXPORT_MODULE();
 
 - (void)speechSynthesizer:(AVSpeechSynthesizer *)synthesizer
   didStartSpeechUtterance:(AVSpeechUtterance *)utterance {
-   [self enableDucking];
-   [self emitOnStart:[self getEventData:utterance]];
+    if (![utterance.accessibilityHint isEqualToString:@"__warmup__"]) {
+      self.activeUtteranceCount += 1;
+      [self enableDucking];
+      [self emitOnStart:[self getEventData:utterance]];
+    }
 }
 
 - (void)speechSynthesizer:(AVSpeechSynthesizer *)synthesizer
@@ -290,8 +293,11 @@ RCT_EXPORT_MODULE();
 
 - (void)speechSynthesizer:(AVSpeechSynthesizer *)synthesizer
   didFinishSpeechUtterance:(AVSpeechUtterance *)utterance {
-    self.activeUtteranceCount -= 1;
-    [self emitOnFinish:[self getEventData:utterance]];
+    if (![utterance.accessibilityHint isEqualToString:@"__warmup__"]) {
+        self.activeUtteranceCount -= 1;
+        [self emitOnFinish:[self getEventData:utterance]];
+    }
+
     if (self.activeUtteranceCount <= 0) {
         self.activeUtteranceCount = 0;
         [self disableDucking];
@@ -310,9 +316,13 @@ RCT_EXPORT_MODULE();
 
 - (void)speechSynthesizer:(AVSpeechSynthesizer *)synthesizer
   didCancelSpeechUtterance:(AVSpeechUtterance *)utterance {
-  if (!synthesizer.isSpeaking) {
-    [self disableDucking];
-  }
+    if (![utterance.accessibilityHint isEqualToString:@"__warmup__"]) {
+        self.activeUtteranceCount -= 1;
+    }
+
+    if (!synthesizer.isSpeaking) {
+        [self disableDucking];
+    }
   [self emitOnStopped:[self getEventData:utterance]];
 }
 
