@@ -279,6 +279,7 @@ RCT_EXPORT_MODULE();
     }
 
     [self.synthesizer speakUtterance:utterance];
+    self.activeUtteranceCount += 1;
 
     resolve(nil);
   }
@@ -291,7 +292,6 @@ RCT_EXPORT_MODULE();
 - (void)speechSynthesizer:(AVSpeechSynthesizer *)synthesizer
   didStartSpeechUtterance:(AVSpeechUtterance *)utterance {
     if (![utterance.accessibilityHint isEqualToString:@"__warmup__"]) {
-      self.activeUtteranceCount += 1;
       [self enableDucking];
       [self emitOnStart:[self getEventData:utterance]];
     }
@@ -308,15 +308,13 @@ RCT_EXPORT_MODULE();
 
 - (void)speechSynthesizer:(AVSpeechSynthesizer *)synthesizer
   didFinishSpeechUtterance:(AVSpeechUtterance *)utterance {
-    if (!self.synthesizer.isSpeaking && self.activeUtteranceCount <= 0) {
-        [self disableDucking];
-        [self emitOnFinish:[self getEventData:utterance]];
-        return;
-    }
-
     if (![utterance.accessibilityHint isEqualToString:@"__warmup__"]) {
         self.activeUtteranceCount -= 1;
         [self emitOnFinish:[self getEventData:utterance]];
+    }
+
+    if (!self.synthesizer.isSpeaking && self.activeUtteranceCount <= 0) {
+        [self disableDucking];
     }
 }
 
@@ -334,12 +332,12 @@ RCT_EXPORT_MODULE();
   didCancelSpeechUtterance:(AVSpeechUtterance *)utterance {
     if (![utterance.accessibilityHint isEqualToString:@"__warmup__"]) {
         self.activeUtteranceCount -= 1;
+        [self emitOnStopped:[self getEventData:utterance]];
     }
 
     if (!synthesizer.isSpeaking) {
         [self disableDucking];
     }
-  [self emitOnStopped:[self getEventData:utterance]];
 }
 
 - (std::shared_ptr<facebook::react::TurboModule>)getTurboModule:
