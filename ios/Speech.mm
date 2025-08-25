@@ -308,14 +308,15 @@ RCT_EXPORT_MODULE();
 
 - (void)speechSynthesizer:(AVSpeechSynthesizer *)synthesizer
   didFinishSpeechUtterance:(AVSpeechUtterance *)utterance {
+    if (!self.synthesizer.isSpeaking && self.activeUtteranceCount <= 0) {
+        [self disableDucking];
+        [self emitOnFinish:[self getEventData:utterance]];
+        return;
+    }
+
     if (![utterance.accessibilityHint isEqualToString:@"__warmup__"]) {
         self.activeUtteranceCount -= 1;
         [self emitOnFinish:[self getEventData:utterance]];
-    }
-
-    if (self.activeUtteranceCount <= 0) {
-        self.activeUtteranceCount = 0;
-        [self disableDucking];
     }
 }
 
