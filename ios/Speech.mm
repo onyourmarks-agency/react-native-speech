@@ -51,6 +51,7 @@ RCT_EXPORT_MODULE();
 
 - (void)enableDucking {
   if (self.isDucking) return;
+  if (self.activeUtteranceCount > 0) return;
 
   NSError *error = nil;
   [[AVAudioSession sharedInstance] setCategory:AVAudioSessionCategoryPlayback
@@ -278,8 +279,9 @@ RCT_EXPORT_MODULE();
       utterance.rate = [validatedOptions[@"rate"] floatValue];
     }
 
-    [self.synthesizer speakUtterance:utterance];
     self.activeUtteranceCount += 1;
+    [self enableDucking];
+    [self.synthesizer speakUtterance:utterance];
 
     resolve(nil);
   }
@@ -292,7 +294,6 @@ RCT_EXPORT_MODULE();
 - (void)speechSynthesizer:(AVSpeechSynthesizer *)synthesizer
   didStartSpeechUtterance:(AVSpeechUtterance *)utterance {
     if (![utterance.accessibilityHint isEqualToString:@"__warmup__"]) {
-      [self enableDucking];
       [self emitOnStart:[self getEventData:utterance]];
     }
 }
